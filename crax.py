@@ -1,84 +1,88 @@
 import hashlib
 import sys
-import os
 import time
-from concurrent.futures import ThreadPoolExecutor
+import os
 
-# Hash algorithm lengths for common types
+# Supported hash lengths
 HASH_LENGTHS = {
-    32: 'md5',
-    40: 'sha1',
-    64: 'sha256',
-    128: 'sha512',
-    56: 'sha224',
-    96: 'sha384',
+    32: "md5",
+    40: "sha1",
+    56: "sha224",
+    64: "sha256",
+    96: "sha384",
+    128: "sha512",
 }
 
+
 def detect_algorithm(target_hash):
-    """Detects the hash algorithm based on the hash length"""
-    hash_length = len(target_hash)
-    if hash_length in HASH_LENGTHS:
-        return HASH_LENGTHS[hash_length]
-    else:
-        print("Hash length not recognized. Please specify an algorithm.")
-        return None
+    """Detect hash algorithm based on hash length."""
+    algo = HASH_LENGTHS.get(len(target_hash))
+    if not algo:
+        print("[-] Unable to detect hash algorithm by length.")
+    return algo
 
-def crack_hash(word, algorithm, target_hash):
-    """Cracks the hash using a given word and algorithm"""
+
+def crack_hash(target_hash, wordlist, algorithm):
+    """Stream wordlist line-by-line and compare hashes."""
+    attempts = 0
+    start_time = time.time()
+
     try:
-        hash_func = hashlib.new(algorithm)
-        hash_func.update(word.encode())
-        test_hash = hash_func.hexdigest()
-        if test_hash == target_hash:
-            return word
-    except Exception as e:
-        print(f"Error: {e}")
-    return None
+        with open(wordlist, "r", encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                attempts += 1
+                word = line.strip()
 
-def process_wordlist(wordlist, algorithm, target_hash):
-    with open(wordlist, "r") as f:
-        for i, word in enumerate(f):
-            word = word.strip()
+                hash_obj = hashlib.new(algorithm)
+                hash_obj.update(word.encode())
+                if hash_obj.hexdigest() == target_hash:
+                    elapsed = time.time() - start_time
+                    print(f"\n[+] Password found: {word}")
+                    print(f"[+] Attempts: {attempts}")
+                    print(f"[+] Time elapsed: {elapsed:.2f} seconds")
+                    return
 
-            hash_func = hashlib.new(algorithm)
-            hash_func.update(word.encode())
-            test_hash = hash_func.hexdigest()
+                # Progress update every 50k attempts
+                if attempts % 50000 == 0:
+                    elapsed = time.time() - start_time
+                    print(f"[*] Tried {attempts} passwords... ({elapsed:.1f}s elapsed)")
 
-            if test_hash == target_hash:
-                print(f"Found: {word}")
-                return
+    except FileNotFoundError:
+        print("[-] Wordlist file not found.")
+        return
 
-            if i % 50000 == 0:
-                print(f"Tried {i} words...")
+    elapsed = time.time() - start_time
+    print("\n[-] No match found.")
+    print(f"[*] Total attempts: {attempts}")
+    print(f"[*] Time elapsed: {elapsed:.2f} seconds")
 
-    print("No match found.")
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python crack.py <hash> <wordlist> [<algorithm>]")
+        print("Usage: python crax.py <hash> <wordlist> [algorithm]")
         sys.exit(1)
 
     target_hash = sys.argv[1].lower()
     wordlist = sys.argv[2]
 
-    # Detect the algorithm if not specified
-    algorithm = sys.argv[3].lower() if len(sys.argv) > 3 else detect_algorithm(target_hash)
+    # Manual algorithm override
+    if len(sys.argv) == 4:
+        algorithm = sys.argv[3].lower()
+    else:
+        algorithm = detect_algorithm(target_hash)
 
     if not algorithm:
         sys.exit(1)
 
     if algorithm not in hashlib.algorithms_available:
-        print(f"Unsupported algorithm: {algorithm}")
+        print(f"[-] Unsupported algorithm: {algorithm}")
         sys.exit(1)
 
-    print(f"Cracking hash using {algorithm}...")
+    print(f"[+] Using algorithm: {algorithm}")
+    print(f"[+] Starting hash audit...\n")
 
-    start_time = time.time()
-    process_wordlist(wordlist, algorithm, target_hash)
-    elapsed_time = time.time() - start_time
+    crack_hash(target_hash, wordlist, algorithm)
 
-    print(f"Process completed in {elapsed_time:.2f} seconds.")
 
 if __name__ == "__main__":
     main()
-
